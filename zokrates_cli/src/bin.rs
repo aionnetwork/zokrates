@@ -7,6 +7,7 @@
 use bincode::{deserialize_from, serialize_into, Infinite};
 use clap::{App, AppSettings, Arg, SubCommand};
 use serde_json::Value;
+use std::fs;
 use std::fs::File;
 use std::io::{stdin, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -18,8 +19,15 @@ use zokrates_core::ir;
 use zokrates_core::proof_system::*;
 use zokrates_field::field::{Field, FieldPrime};
 use zokrates_fs_resolver::resolve as fs_resolve;
+
+use zokrates_core::proof_system::bn128::utils::java::{
+    JAVA_LIB_FP, JAVA_LIB_FP2, JAVA_LIB_G1, JAVA_LIB_G1POINT,
+    JAVA_LIB_G2, JAVA_LIB_G2POINT, JAVA_LIB_PAIRING, JAVA_LIB_UTIL
+};
+
 #[cfg(feature = "github")]
 use zokrates_github_resolver::{is_github_import, resolve as github_resolve};
+use std::collections::HashMap;
 
 fn main() {
     cli().unwrap_or_else(|e| {
@@ -46,6 +54,10 @@ fn cli() -> Result<(), String> {
     const VERIFICATION_KEY_DEFAULT_PATH: &str = "verification.key";
     const PROVING_KEY_DEFAULT_PATH: &str = "proving.key";
     const VERIFICATION_CONTRACT_DEFAULT_PATH: &str = "verifier.sol";
+
+    const VERIFICATION_AVM_CONTRACT_DEFAULT_PATH: &str = "avm-verifier";
+
+
     const WITNESS_DEFAULT_PATH: &str = "witness";
     const JSON_PROOF_PATH: &str = "proof.json";
     let default_scheme = env::var("ZOKRATES_PROVING_SCHEME").unwrap_or(String::from("g16"));
@@ -154,6 +166,34 @@ fn cli() -> Result<(), String> {
             .possible_values(&["v1", "v2"])
             .default_value(&default_solidity_abi)
             .required(false)
+        )
+    )
+    .subcommand(SubCommand::with_name("export-avm-verifier")
+        .about("Exports a verifier as AVM smart contract")
+        .arg(Arg::with_name("input")
+            .short("i")
+            .long("input")
+            .help("Path of the verifier")
+            .value_name("FILE")
+            .takes_value(true)
+            .required(false)
+            .default_value(VERIFICATION_KEY_DEFAULT_PATH)
+        ).arg(Arg::with_name("output")
+            .short("o")
+            .long("output")
+            .help("Path of the output file")
+            .value_name("FILE")
+            .takes_value(true)
+            .required(false)
+            .default_value(VERIFICATION_AVM_CONTRACT_DEFAULT_PATH)
+        ).arg(Arg::with_name("proving-scheme")
+            .short("s")
+            .long("proving-scheme")
+            .help("Proving scheme to use to export the verifier. Available options are G16 (default), PGHR13 and GM17")
+            .value_name("FILE")
+            .takes_value(true)
+            .required(false)
+            .default_value(&default_scheme)
         )
     )
     .subcommand(SubCommand::with_name("compute-witness")
@@ -484,6 +524,58 @@ fn cli() -> Result<(), String> {
                 writer
                     .write_all(&verifier.as_bytes())
                     .map_err(|_| "Failed writing output to file.".to_string())?;
+
+                println!("Finished exporting verifier.");
+            }
+        }
+        ("export-avm-verifier", Some(sub_matches)) => {
+            {
+                let scheme = get_scheme(sub_matches.value_of("proving-scheme").unwrap())?;
+                println!("Exporting AVM verifier...");
+
+                // read vk file
+                let input_path = Path::new(sub_matches.value_of("input").unwrap());
+                let input_file = File::open(&input_path)
+                    .map_err(|why| format!("couldn't open {}: {}", input_path.display(), why))?;
+                let reader = BufReader::new(input_file);
+
+                // store the verifier java contract in memory
+                let verifier = scheme.export_avm_verifier(reader);
+
+                // write a directory
+                let output_path = Path::new(sub_matches.value_of("output").unwrap());
+
+                fs::create_dir(output_path)
+                    .map_err(|why| format!("couldn't create {}: {}", output_path.display(), why))?;
+
+                assert_eq!(output_path.is_dir(), true, "output path must be a directory");
+
+                let mut files = HashMap::new();
+                files.insert("Verifier.java", verifier);
+                files.insert("Fp.java", JAVA_LIB_FP.parse().unwrap());
+                files.insert("Fp2.java", JAVA_LIB_FP2.parse().unwrap());
+                files.insert("G1.java", JAVA_LIB_G1.parse().unwrap());
+                files.insert("G1Point.java", JAVA_LIB_G1POINT.parse().unwrap());
+                files.insert("G2.java", JAVA_LIB_G2.parse().unwrap());
+                files.insert("G2Point.java", JAVA_LIB_G2POINT.parse().unwrap());
+                files.insert("Pairing.java", JAVA_LIB_PAIRING.parse().unwrap());
+                files.insert("Util.java", JAVA_LIB_UTIL.parse().unwrap());
+
+                // write out all the files to disk
+                for (name, content) in &files {
+                    println!("writing out file: {}", name);
+
+                    let output_path = Path::new(sub_matches.value_of("output").unwrap());
+                    let output_file = File::create((output_path.join(name)).as_path())
+                        .map_err(|why| format!("couldn't create {}: {}", output_path.display(), why))?;
+
+                    let mut writer = BufWriter::new(output_file);
+
+                    writer
+                        .write_all(&content.as_bytes())
+                        .map_err(|_| "Failed writing output to file.".to_string())?;
+                }
+
                 println!("Finished exporting verifier.");
             }
         }

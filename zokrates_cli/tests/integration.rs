@@ -224,6 +224,20 @@ mod integration {
             .succeeds()
             .unwrap();
 
+            // EXPORT-VERIFIER (AMV)
+            assert_cli::Assert::command(&[
+                "../target/release/zokrates",
+                "export-verifier-avm",
+                "-i",
+                verification_key_path.to_str().unwrap(),
+                "-o",
+                verification_contract_path.to_str().unwrap(),
+                "--proving-scheme",
+                scheme,
+            ])
+                .succeeds()
+                .unwrap();
+
             // GENERATE-PROOF
             assert_cli::Assert::command(&[
                 "../target/release/zokrates",

@@ -1,4 +1,4 @@
-mod bn128;
+pub mod bn128;
 
 use std::fs::File;
 use zokrates_field::field::FieldPrime;
@@ -24,4 +24,6 @@ pub trait ProofSystem {
     ) -> bool;
 
     fn export_solidity_verifier(&self, reader: BufReader<File>, is_abiv2: bool) -> String;
+
+    fn export_avm_verifier(&self, reader: BufReader<File>) -> String;
 }
