@@ -1,5 +1,5 @@
 pub const JAVA_LIB_FP: &str = r#"// This file is MIT Licensed
-package org.aion.tetryon.bn128;
+package org.oan.tetryon;
 
 import java.math.BigInteger;
 
@@ -48,10 +48,11 @@ public class Fp {
         return Util.bytesToHex(c0.toByteArray());
     }
 }
+
 "#;
 
 pub const JAVA_LIB_FP2: &str = r#"// This file is MIT Licensed
-package org.aion.tetryon.bn128;
+package org.oan.tetryon;
 
 import java.math.BigInteger;
 
@@ -176,10 +177,11 @@ public class Fp2 {
         return "(" + Util.bytesToHex(a.toByteArray()) + ", " + Util.bytesToHex(b.toByteArray()) + ")";
     }
 }
+
 "#;
 
 pub const JAVA_LIB_G1: &str = r#"// This file is MIT Licensed
-package org.aion.tetryon.bn128;
+package org.oan.tetryon;
 
 import avm.AltBn128;
 
@@ -247,10 +249,13 @@ public class G1 {
         return result;
     }
 }
+
 "#;
 
 pub const JAVA_LIB_G1POINT: &str = r#"// This file is MIT Licensed
-package org.aion.tetryon.bn128;
+package org.oan.tetryon;
+
+import java.math.BigInteger;
 
 /**
  * Represents a point on G1.
@@ -258,6 +263,11 @@ package org.aion.tetryon.bn128;
 public class G1Point {
     public final Fp x;
     public final Fp y;
+
+    public G1Point(String x, String y) {
+        this.x = new Fp(new BigInteger(x, 16));
+        this.y = new Fp(new BigInteger(y, 16));
+    }
 
     public G1Point(Fp x, Fp y) {
         this.x = x;
@@ -290,10 +300,11 @@ public class G1Point {
         return "(" + x + ", " + y + ")";
     }
 }
+
 "#;
 
 pub const JAVA_LIB_G2: &str = r#"// This file is MIT Licensed
-package org.aion.tetryon.bn128;
+package org.oan.tetryon;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -520,10 +531,13 @@ public class G2 {
         }
     }
 }
+
 "#;
 
 pub const JAVA_LIB_G2POINT: &str = r#"// This file is MIT Licensed
-package org.aion.tetryon.bn128;
+package org.oan.tetryon;
+
+import java.math.BigInteger;
 
 /**
  * Represents a point on the elliptic curve.
@@ -531,6 +545,11 @@ package org.aion.tetryon.bn128;
 public class G2Point {
     public final Fp2 x;
     public final Fp2 y;
+
+    public G2Point(String x_a, String x_b, String y_a, String y_b) {
+        this.x = new Fp2(new BigInteger(x_a, 16), new BigInteger(x_b, 16));
+        this.y = new Fp2(new BigInteger(y_a, 16), new BigInteger(y_b, 16));
+    }
 
     public G2Point(Fp2 x, Fp2 y) {
         this.x = x;
@@ -563,10 +582,11 @@ public class G2Point {
         return "(" + x + ", " + y + ")";
     }
 }
+
 "#;
 
 pub const JAVA_LIB_PAIRING: &str = r#"// This file is MIT Licensed
-package org.aion.tetryon.bn128;
+package org.oan.tetryon;
 
 import avm.AltBn128;
 
@@ -637,10 +657,11 @@ public class Pairing {
         return pairing(new G1Point[]{a1, b1, c1, d1}, new G2Point[]{a2, b2, c2, d2});
     }
 }
+
 "#;
 
 pub const JAVA_LIB_UTIL: &str = r#"// This file is MIT Licensed
-package org.aion.tetryon.bn128;
+package org.oan.tetryon;
 
 public class Util {
 
@@ -656,6 +677,7 @@ public class Util {
         return new String(hexChars);
     }
 }
+
 "#;
 
 

@@ -425,11 +425,10 @@ contract Verifier {
 
 
 const CONTRACT_AVM_TEMPLATE: &str = r#"// This file is MIT Licensed
-package org.aion.tetryon;
+package org.oan.tetryon;
 
 import avm.Blockchain;
 import org.aion.avm.tooling.abi.Callable;
-import org.aion.tetryon.bn128.*;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -538,12 +537,18 @@ public class Verifier {
 
     @Callable
     public static boolean verify(BigInteger[] input, byte[] proof) {
+        Blockchain.println("verify() called");
+
         try {
-            return verify(input, Proof.deserialize(proof));
+            if (verify(input, Proof.deserialize(proof))) {
+                Blockchain.log("VerifySnark".getBytes(), BigInteger.ONE.toByteArray());
+                return true;
+            }
         } catch (Exception e) {
             Blockchain.println("verify() failed with exception: " + e.getMessage());
         }
 
+        Blockchain.log("VerifySnark".getBytes(), BigInteger.ZERO.toByteArray());
         return false;
     }
 }
