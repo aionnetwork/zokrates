@@ -10,5 +10,5 @@ set -e
 #	cargo +nightly -Z package-features build --package zokrates_cli --features="libsnark"
 #else
 	echo "building zokrates without libsnark"
-	cargo +nightly build --verbose
+	cargo +nightly build
 #fi
