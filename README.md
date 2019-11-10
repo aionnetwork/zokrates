@@ -3,22 +3,23 @@
 
 # ZoKrates (AVM)
 
-ZoKrates is a toolbox for zkSNARKs. This fork (maintained by the Open Foundation) augments the capabilities of ZoKrates via the cli command `export-avm-verifier`, to enable one to generate SNARK verification contracts that can be deployed on the Aion Virtual Machine. The remaining features in ZoKrates (i.e. expressing programs using the ZoKrates DSL) work the usual way. 
+ZoKrates is a toolbox for zkSNARKs. This fork augments the capabilities of ZoKrates by adding the following command to the command line interface (CLI) 
+```
+./zokrates export-avm-verifier [--proving-scheme <'G16'|'PGHR13'|'GM17'>] [--input <verifier path>] [--output <path>]
+```
+This command enables generation of SNARK verification contracts which can be deployed directly onto the Aion Virtual Machine (AVM). All other ZoKrates features (i.e. expressing SNARKs using the ZoKrates DSL) work as [documented](https://zokrates.github.io/). 
 
-**Note:** Currently only the Groth 16 proving scheme  is supported for AVM verifier export. Capabilities to export PGHR13 and GM17 will be added shortly. 
+**Note:** Currently only the Groth 16 (G16) proving scheme is supported for AVM verifier export. Capabilities to export PGHR13 and GM17 will be added shortly. 
 
 _This is a proof-of-concept implementation. It has not been tested for production._
 
 ## Getting Started
 
-* Build zokrates using the `build.sh` script. (the 
-* Zokrates will create a folder called verifier, in which will be all Java source files. The contract is called `Verifier.java`.
-* Deploy on AVM the usual way :)   
+* Build zokrates using the `build.sh` or `build_release.sh` scripts (requires Rust to be [installed](https://rustup.rs/)).
+* Express a SNARK using the ZoKrates DSL as usual (the [documentation](https://zokrates.github.io/introduction.html) is quite helpful). The built binary will be located in `target/release` or `target/debug` folder.
+* When you're ready to generate a AVM contract containing the SNARK verification logic, simply run through the `compile` > `setup` > `compute-witness` > `generate-proof` steps using the built ZoKrates binary as usual. 
+* Instead of calling `export-verifier` (which generates a Solidity contract), call `export-avm-verifier`, which generates a set of Java source files within a directory called `avm-verifier`. The entry-point to the AVM contract is called `Verifier.java`. 
+* Deploy the contract files in the `avm-verifier` directory the usual way :)   
 
-## Writing SNARKS
 
-You can write SNARKs
-
-Have a look at the [documentation](https://zokrates.github.io/) for more information about using ZoKrates.  
-A getting started tutorial can be found [here](https://zokrates.github.io/sha256example.html).
 
