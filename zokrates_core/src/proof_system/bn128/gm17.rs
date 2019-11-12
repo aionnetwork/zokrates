@@ -194,6 +194,95 @@ impl ProofSystem for GM17 {
             SOLIDITY_G2_ADDITION_LIB, solidity_pairing_lib, template_text
         )
     }
+
+    fn export_avm_verifier(&self, reader: BufReader<File>) -> String {
+        let mut lines = reader.lines();
+        let mut template_text = String::from(CONTRACT_AVM_TEMPLATE);
+
+        let query_template = String::from("query[index] = new G1Point(coord, coord);"); //copy this for each entry
+
+        //replace things in template
+        let vk_regex = Regex::new(r#"(<%vk_[^i%]*%>)"#).unwrap();
+        let vk_query_len_regex = Regex::new(r#"(<%vk_query_length%>)"#).unwrap();
+        let vk_query_index_regex = Regex::new(r#"index"#).unwrap();
+        let vk_query_points_regex = Regex::new(r#"coord"#).unwrap();
+        let vk_query_repeat_regex = Regex::new(r#"(<%vk_query_pts%>)"#).unwrap();
+
+        let vk_value = Regex::new(r"(?P<v>0[xX][0-9a-fA-F]{64})").unwrap();
+
+        for _ in 0..5 {
+            let current_line: String = lines
+                .next()
+                .expect("Unexpected end of file in verification key!")
+                .unwrap();
+            let current_line_split: Vec<&str> = current_line.split("=").collect();
+            assert_eq!(current_line_split.len(), 2);
+
+            let mut values = Vec::new();
+            for value in vk_value.find_iter(current_line_split[1]) {
+                values.push(value.as_str());
+            }
+
+            if values.len() == 4 {
+                template_text = vk_regex.replace(template_text.as_str(), values[1])
+                    .into_owned();
+                template_text = vk_regex.replace(template_text.as_str(), values[0])
+                    .into_owned();
+                template_text = vk_regex.replace(template_text.as_str(), values[3])
+                    .into_owned();
+                template_text = vk_regex.replace(template_text.as_str(), values[2])
+                    .into_owned();
+            } else if values.len() == 2 {
+                template_text = vk_regex.replace(template_text.as_str(), values[0])
+                    .into_owned();
+                template_text = vk_regex.replace(template_text.as_str(), values[1])
+                    .into_owned();
+            }
+        }
+
+        let current_line: String = lines
+            .next()
+            .expect("Unexpected end of file in verification key!")
+            .unwrap();
+        let current_line_split: Vec<&str> = current_line.split("=").collect();
+        assert_eq!(current_line_split.len(), 2);
+        let query_count: i32 = current_line_split[1].trim().parse().unwrap();
+
+        template_text = vk_query_len_regex
+            .replace(template_text.as_str(), format!("{}", query_count).as_str())
+            .into_owned();
+
+        let mut query_repeat_text = String::new();
+        for x in 0..query_count {
+            let mut curr_template = query_template.clone();
+            let current_line: String = lines
+                .next()
+                .expect("Unexpected end of file in verification key!")
+                .unwrap();
+            let current_line_split: Vec<&str> = current_line.split("=").collect();
+            assert_eq!(current_line_split.len(), 2);
+            curr_template = vk_query_index_regex
+                .replace(curr_template.as_str(), format!("{}", x).as_str())
+                .into_owned();
+            for value in vk_value.find_iter(current_line_split[1]) {
+                curr_template = vk_query_points_regex
+                    .replace(curr_template.as_str(), value.as_str())
+                    .into_owned();
+            }
+
+            query_repeat_text.push_str(curr_template.as_str());
+            if x < query_count - 1 {
+                query_repeat_text.push_str("\n        ");
+            }
+        }
+        template_text = vk_query_repeat_regex
+            .replace(template_text.as_str(), query_repeat_text.as_str())
+            .into_owned();
+
+        let re = Regex::new(r"0[xX](?P<v>[0-9a-fA-F]{64})").unwrap();
+        template_text = re.replace_all(&template_text, "\"$v\"").to_string();
+        format!("{}", template_text)
+    }
 }
 
 const CONTRACT_TEMPLATE_V2: &str = r#"
@@ -332,6 +421,141 @@ contract Verifier {
         } else {
             return false;
         }
+    }
+}
+"#;
+
+const CONTRACT_AVM_TEMPLATE: &str = r#"// This file is MIT Licensed
+package org.oan.tetryon;
+
+import avm.Blockchain;
+import org.aion.avm.tooling.abi.Callable;
+
+import java.math.BigInteger;
+import java.util.Arrays;
+
+@SuppressWarnings({"WeakerAccess", "unused"})
+public class Verifier {
+
+    protected static class VerifyingKey {
+
+        public final G2Point h;
+        public final G1Point g_alpha;
+        public final G2Point h_beta;
+        public final G1Point g_gamma;
+        public final G2Point h_gamma;
+        public final G1Point[] query;
+
+        public VerifyingKey(G2Point h, G1Point g_alpha, G2Point h_beta, G1Point g_gamma, G2Point h_gamma, G1Point[] query) {
+            this.h = h;
+            this.g_alpha = g_alpha;
+            this.h_beta = h_beta;
+            this.g_gamma = g_gamma;
+            this.h_gamma = h_gamma;
+            this.query = query;
+        }
+    }
+
+    public static class Proof {
+        public final G1Point a;
+        public final G2Point b;
+        public final G1Point c;
+
+        public Proof(G1Point a, G2Point b, G1Point c) {
+            this.a = a;
+            this.b = b;
+            this.c = c;
+        }
+
+        // serialized as a | b | c
+        public byte[] serialize() {
+            byte[] s = new byte[Fp.ELEMENT_SIZE*8];
+
+            byte[] a = G1.serialize(this.a);
+            byte[] b = G2.serialize(this.b);
+            byte[] c = G1.serialize(this.c);
+
+            System.arraycopy(a, 0, s, 0, a.length);
+            System.arraycopy(b, 0, s, 6*Fp.ELEMENT_SIZE - b.length, b.length);
+            System.arraycopy(c, 0, s, 8*Fp.ELEMENT_SIZE - c.length, c.length);
+
+            return s;
+        }
+
+        public static Proof deserialize(byte[] data) {
+            Blockchain.require(data.length == 8*Fp.ELEMENT_SIZE);
+
+            G1Point a = G1.deserialize(Arrays.copyOfRange(data, 0, 2*Fp.ELEMENT_SIZE));
+            G2Point b = G2.deserialize(Arrays.copyOfRange(data, 2*Fp.ELEMENT_SIZE, 6*Fp.ELEMENT_SIZE));
+            G1Point c = G1.deserialize(Arrays.copyOfRange(data, 6*Fp.ELEMENT_SIZE, 8*Fp.ELEMENT_SIZE));
+
+            return new Proof(a, b, c);
+        }
+    }
+
+    protected static VerifyingKey verifyingKey() {
+        G2Point h = new G2Point(<%vk_hxx%>, <%vk_hxy%>, <%vk_hyx%>, <%vk_hyy%>);
+
+        G1Point g_alpha = new G1Point(<%vk_gax%>,
+                                      <%vk_gay%>);
+
+        G2Point h_beta = new G2Point(<%vk_hbxx%>,
+                                    <%vk_hbxy%>,
+                                    <%vk_hbyx%>,
+                                    <%vk_hbyy%>);
+
+        G1Point g_gamma = new G1Point(<%vk_ggx%>,
+                                     <%vk_ggy%>);
+
+        G2Point h_gamma = new G2Point(<%vk_hgxx%>,
+                                    <%vk_hgxy%>,
+                                    <%vk_hgyx%>,
+                                    <%vk_hgyy%>);
+
+        G1Point[] query = new G1Point[<%vk_query_length%>];
+        <%vk_query_pts%>
+
+        return new VerifyingKey(h, g_alpha, h_beta, g_gamma, h_gamma, query);
+    }
+
+    static final BigInteger snarkScalarField = new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617");
+
+    public static boolean verify(BigInteger[] input, Proof proof) throws Exception {
+        VerifyingKey vk = verifyingKey();
+        Blockchain.require(input.length + 1 == vk.query.length);
+        G1Point X = new G1Point(Fp.zero(), Fp.zero());
+        for (int i = 0; i < input.length; i++) {
+            Blockchain.require(input[i].compareTo(snarkScalarField) < 0);
+            G1Point tmp = G1.mul(vk.query[i + 1], input[i]);
+            if (i == 0)
+                X = tmp;
+            else
+                X = G1.add(X, tmp);
+        }
+        X = G1.add(X, vk.query[0]);
+
+        if(!Pairing.pairingProd4(vk.g_alpha, vk.h_beta, X, vk.h_gamma, proof.c, vk.h, G1.negate(G1.add(proof.a, vk.g_alpha)), G2.ECTwistAdd(proof.b, vk.h_beta))) {
+            return false;
+        }
+
+        return Pairing.pairingProd2(proof.a, vk.h_gamma, G1.negate(vk.g_gamma), proof.b);
+    }
+
+    @Callable
+    public static boolean verify(BigInteger[] input, byte[] proof) {
+        Blockchain.println("verify() called");
+
+        try {
+            if (verify(input, Proof.deserialize(proof))) {
+                Blockchain.log("VerifySnark".getBytes(), BigInteger.ONE.toByteArray());
+                return true;
+            }
+        } catch (Exception e) {
+            Blockchain.println("verify() failed with exception: " + e.getMessage());
+        }
+
+        Blockchain.log("VerifySnark".getBytes(), BigInteger.ZERO.toByteArray());
+        return false;
     }
 }
 "#;
